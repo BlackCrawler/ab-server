@@ -8,6 +8,8 @@ import {
   SERVER_BOUNCE_DELAY_MS,
   SERVER_MIN_MOB_ID,
   UPGRADES_OWNER_INACTIVITY_TIMEOUT_MS,
+  ABILITIES_TYPES,
+  ABILITIES_SPECS,
 } from '@/constants';
 import {
   BROADCAST_EVENT_BOUNCE,
@@ -38,7 +40,14 @@ import {
 import Entity from '@/server/entity';
 import { System } from '@/server/system';
 import { has } from '@/support/objects';
-import { ConnectionId, MainConnectionId, MobId } from '@/types';
+import { ConnectionId, MainConnectionId, MobId, PlayerId } from '@/types';
+
+import Damage from '@/server/components/damage';
+import Id from '@/server/components/mob-id';
+import MobType from '@/server/components/mob-type';
+import Owner from '@/server/components/owner';
+import Position from '@/server/components/position';
+import Velocity from '@/server/components/velocity';
 
 const isBox = (mobType: number): boolean => {
   return (
@@ -263,18 +272,21 @@ export default class GameCollisions extends System {
        */
       const collisions = player.hitbox.current.potentials();
 
+
       if (collisions.length > 0) {
         collisions.sort((a: any, b: any) => a.type - b.type);
 
         for (let ci = 0; ci < collisions.length; ci += 1) {
           const mobHitbox = collisions[ci];
           const { id, type } = mobHitbox;
-
+          if (type == COLLISIONS_OBJECT_TYPES.PLAYER){
+            this.log.debug(`DANGER COLLISIONS! ${id}, ${type} : collid: ${this.checkPlayerCollisions(player, id, type)}`)
+          }
           if (
             player.alivestatus.current === PLAYERS_ALIVE_STATUSES.ALIVE &&
             id !== player.id.current &&
             type !== COLLISIONS_OBJECT_TYPES.VIEWPORT &&
-            this.checkPlayerCollisions(player, id)
+              this.checkPlayerCollisions(player, id, type)
           ) {
             if (
               type === COLLISIONS_OBJECT_TYPES.MOUNTAIN &&
@@ -336,14 +348,14 @@ export default class GameCollisions extends System {
               this.delay(BROADCAST_PLAYER_HIT, id, [player.id.current]);
 
               if (player.health.current === PLAYERS_HEALTH.MIN) {
-                this.emit(PLAYERS_KILL, player.id.current, id);
+                const projectile = this.storage.mobList.get(id);
+                this.emit(PLAYERS_KILL, player.id.current, projectile.owner.current);
 
                 if (!player.delayed.RESPONSE_SCORE_UPDATE) {
                   player.delayed.RESPONSE_SCORE_UPDATE = true;
                   this.delay(RESPONSE_SCORE_UPDATE, player.id.current);
                 }
 
-                const projectile = this.storage.mobList.get(id);
 
                 if (this.storage.playerList.has(projectile.owner.current)) {
                   const enemy = this.storage.playerList.get(projectile.owner.current);
@@ -358,6 +370,10 @@ export default class GameCollisions extends System {
               }
 
               this.delay(PROJECTILES_DELETE, id);
+            }else if (type === COLLISIONS_OBJECT_TYPES.PLAYER){
+              // this.log.debug("ANOTHER PLAYER collission!! ")
+              //Kamikadze-san here
+              this.handleKamikadzeCollision(player, id)
             }
           }
         }
@@ -399,6 +415,75 @@ export default class GameCollisions extends System {
     });
 
     this.emitDelayed();
+  }
+
+  protected killKamikadze(kamikadze: Entity, killer: Entity = null){
+
+    kamikadze.health.current = PLAYERS_HEALTH.MIN;
+    this.emit(PLAYERS_KILL, kamikadze.id.current, killer ? killer.id.current : 0);
+    if (!kamikadze.delayed.RESPONSE_SCORE_UPDATE) {
+      kamikadze.delayed.RESPONSE_SCORE_UPDATE = true;
+      this.delay(RESPONSE_SCORE_UPDATE, kamikadze.id.current);
+    }
+  }
+
+
+  protected handleKamikadzeCollision(player: Entity, kamikadzeId: PlayerId) {
+    if (!this.storage.playerList.has(kamikadzeId))
+      return;
+
+    const kamikadze = this.storage.playerList.get(kamikadzeId);
+
+    if (player.ability.current === ABILITIES_TYPES.PREDATOR_KAMIKADZE && player.ability.enabled){
+      //then destroy both kamikadze
+      this.killKamikadze(kamikadze, player);
+      this.killKamikadze(player, kamikadze);
+      return;
+    }
+
+
+    //create projectile from the ship
+    const projectile = new Entity().attach(
+      new Id(this.helpers.createMobId()),
+      new MobType(ABILITIES_SPECS[kamikadze.ability.current].missileType),
+      new Position(kamikadze.position.x, kamikadze.position.y),
+      new Velocity(kamikadze.velocity.x, kamikadze.velocity.y),
+      new Owner(kamikadze.id.current),
+      new Damage(kamikadze.damage),
+    );
+    projectile.velocity.length = 4.05;
+    //TODO?
+    // projectile.velocity.length =
+    //   dropVelocity + (PROJECTILE_SPECS.baseSpeed + speedFactor) * upgradeFactor;
+    this.storage.mobList.set(projectile.id.current, projectile);
+
+    this.emit(PLAYERS_HIT, player.id.current, projectile.id.current);
+    // this.delay(BROADCAST_PLAYER_HIT, projectile.id.current, [player.id.current]);
+    //TODO i need to add this fake projectiles to all players
+    //Need to rework kamikadze ability
+    addViewer(this.storage.broadcast, projectile.id.current,
+              this.storage.playerMainConnectionList.get(player.id.current));
+    addViewer(this.storage.broadcast, projectile.id.current,
+              this.storage.playerMainConnectionList.get(kamikadzeId));
+    this.emit(BROADCAST_PLAYER_HIT, projectile.id.current, [player.id.current]);
+
+    this.storage.mobList.delete(projectile.id.current);
+    projectile.destroy();
+
+    //handle victim
+    if (player.health.current === PLAYERS_HEALTH.MIN) {
+      this.emit(PLAYERS_KILL, player.id.current, kamikadzeId);
+
+      if (!player.delayed.RESPONSE_SCORE_UPDATE) {
+        player.delayed.RESPONSE_SCORE_UPDATE = true;
+        this.delay(RESPONSE_SCORE_UPDATE, player.id.current);
+      }
+
+    }
+
+    //kill kamikadze
+
+    this.killKamikadze(kamikadze);
   }
 
   protected checkProjectileToMountainCollision(projectile: Entity, mountainId: MobId): boolean {
@@ -452,9 +537,23 @@ export default class GameCollisions extends System {
     return hasCollision;
   }
 
-  protected checkPlayerCollisions(player: Entity, mobId: MobId): boolean {
-    const mob = this.storage.mobList.get(mobId);
+  protected checkPlayerCollisions(player: Entity, mobId: MobId, type: number): boolean {
     let hasCollision = false;
+
+    let mob = null;
+    if (type === COLLISIONS_OBJECT_TYPES.PLAYER){
+      const otherPlayer = this.storage.playerList.get(mobId);
+      if (otherPlayer.alivestatus.current !== PLAYERS_ALIVE_STATUSES.ALIVE) {
+        return hasCollision;
+      }
+      //TODO check team of players
+      if (otherPlayer.ability.current === ABILITIES_TYPES.PREDATOR_KAMIKADZE &&
+          otherPlayer.ability.enabled)
+        mob = otherPlayer;
+    }
+    else
+      mob = this.storage.mobList.get(mobId);
+
 
     if (!mob) {
       return hasCollision;

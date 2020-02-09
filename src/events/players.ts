@@ -22,6 +22,8 @@ export const PLAYERS_REMOVED = 'PLAYERS_REMOVED';
 
 export const PLAYERS_HIT = 'PLAYERS_HIT';
 
+export const PLAYERS_KAMIKADZE_HIT = 'PLAYERS_KAMIKADZE_HIT';
+
 export const PLAYERS_KILL = 'PLAYERS_KILL';
 
 export const PLAYERS_KICK = 'PLAYERS_KICK';

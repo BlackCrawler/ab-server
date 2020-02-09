@@ -39,30 +39,27 @@ export default class GamePlayersKill extends System {
   /**
    * Kill player.
    *
-   * @param projectileId
+   * @param killerId
    * @param victimId
    */
-  onKillPlayer(victimId: PlayerId, projectileId: MobId): void {
+  onKillPlayer(victimId: PlayerId, killerId: PlayerId): void {
     const isVictimBot = this.storage.botIdList.has(victimId);
     let isKillerBot = false;
     let killer: Entity = null;
-    let projectileOwner: PlayerId = 0;
     const victim = this.storage.playerList.get(victimId);
 
-    if (projectileId !== 0) {
-      const projectile = this.storage.mobList.get(projectileId);
+    if (killerId !== 0) {
 
-      projectileOwner = projectile.owner.current;
-
-      this.log.debug(`Player id${victimId} was killed by player id${projectile.owner.current}.`);
+      this.log.debug(`Player id${victimId} was killed by player id${killerId}.`);
 
       /**
        * Tracking killer kills and score.
        * Damage was already updated on hit event.
        */
-      if (this.storage.playerList.has(projectile.owner.current)) {
-        killer = this.storage.playerList.get(projectile.owner.current);
+      if (this.storage.playerList.has(killerId)) {
+        killer = this.storage.playerList.get(killerId);
         isKillerBot = this.storage.botIdList.has(killer.id.current);
+
 
         killer.kills.current += 1;
         killer.kills.currentmatch += 1;
@@ -83,8 +80,10 @@ export default class GamePlayersKill extends System {
 
         killer.score.current += earnedScore;
 
-        if (has(killer, 'user')) {
-          const user = this.storage.userList.get(killer.user.id);
+      this.log.debug(`Player id${killerId} +${earnedScore} score.`);
+
+      if (has(killer, 'user')) {
+        const user = this.storage.userList.get(killer.user.id);
 
           user.lifetimestats.totalkills += 1;
           user.lifetimestats.earnings += earnedScore;
@@ -97,7 +96,7 @@ export default class GamePlayersKill extends System {
     /**
      * Tracking victim deaths and score.
      */
-    victim.deaths.killerId = projectileOwner;
+      victim.deaths.killerId = killerId;
     victim.deaths.current += 1;
 
     if (killer !== null && isKillerBot === true) {
@@ -105,6 +104,7 @@ export default class GamePlayersKill extends System {
     }
 
     victim.score.current = Math.round(victim.score.current * 0.8) - 5;
+    this.log.debug(`Player id${victimId} -${Math.round(victim.score.current * 0.2) + 5} score.`);
 
     if (has(victim, 'user')) {
       const user = this.storage.userList.get(victim.user.id);
@@ -242,12 +242,13 @@ export default class GamePlayersKill extends System {
     this.delay(
       BROADCAST_PLAYER_KILL,
       victimId,
-      projectileOwner,
+      killerId,
       victim.position.x,
       victim.position.y
     );
 
-    this.delay(PLAYERS_KILLED, victimId, projectileOwner, projectileId);
+    this.delay(PLAYERS_KILLED, victimId, killerId);
     this.delay(PLAYERS_ALIVE_UPDATE);
+
   }
 }

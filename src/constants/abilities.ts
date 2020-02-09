@@ -6,6 +6,7 @@ export const ABILITIES_TYPES = {
   HEXAGON_FIRE_TEMPLATE: 2,
   STEALH: 3,
   CHARGING_ATTACK: 4,
+  PREDATOR_KAMIKADZE: 5,
 };
 
 export const ABILITIES_SPECS = {
@@ -174,6 +175,32 @@ export const ABILITIES_SPECS = {
       player.ability.chargingFire = 0;
     },
   },
+  [ABILITIES_TYPES.PREDATOR_KAMIKADZE]: {
+    name: 'kamikadze',
+    forShips: [SHIPS_TYPES.PREDATOR],
+    cost: 3, // boxes
+
+    fire: false,
+    special: false,
+    specialPersistent: true,
+
+
+    maxCapacity: 1,
+    capacityDrain: 0,
+    rechargeTime: 0, // ms
+    abilityDelay: 300, // ms.
+    abilityEnergy: 0.2,
+
+    checkLaunchConditions: (player, SPEC, _now) => {
+      return player.energy.current >= SPEC.abilityEnergy &&
+        player.keystate.UP;
+    },
+    checkPersistentAbilityConditions: (player, _SPEC, _now) => {
+      return player.keystate.UP;
+    },
+
+  },
+
 };
 
 export const ABILITIES_NAMES = Object.keys(ABILITIES_SPECS).reduce((obj, k) => {

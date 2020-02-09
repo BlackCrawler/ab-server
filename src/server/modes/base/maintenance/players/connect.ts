@@ -13,6 +13,7 @@ import {
   SHIPS_TYPES,
   UPGRADES_ACTION_TYPE,
   UPGRADES_START_AMOUNT,
+  ABILITIES_TYPES,
 } from '@/constants';
 import {
   BROADCAST_CHAT_SERVER_WHISPER,
@@ -187,7 +188,7 @@ export default class GamePlayersConnect extends System {
       new Captures(),
       new Recaptures(),
       new Shield(true, Date.now() + PLAYERS_SPAWN_SHIELD_DURATION_MS),
-      new Ability(),
+      new Ability(ABILITIES_TYPES.PREDATOR_KAMIKADZE),
       new Stunned(),
       new Inferno(),
       new Keystate(),
